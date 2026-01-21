@@ -146,9 +146,10 @@ func (p *Packet) DataLen() []byte {
 
 // Sender class
 type Sender struct {
-	Host           string
-	MaxRedirects   int  // max redirect attempts bedore error; default is 3
-	UpdateHost     bool // if true, update s.Host to final proxy after success
+	Hosts          []string // ordered list of proxies/servers; first successful cached in PrimaryHost
+	PrimaryHost    string   // cached working host (empty = round-robin first)
+	MaxRedirects   int      // max redirect attempts bedore error; default is 3
+	UpdateHost     bool     // if true, update s.Host to final proxy after success
 	ConnectTimeout time.Duration
 	ReadTimeout    time.Duration
 	WriteTimeout   time.Duration
@@ -157,7 +158,18 @@ type Sender struct {
 // NewSender return a sender object to send metrics using default values for timeouts
 func NewSender(host string) *Sender {
 	return &Sender{
-		Host:           host,
+		Hosts:          []string{host},
+		MaxRedirects:   defaultMaxRedirects,
+		UpdateHost:     defaultUpdateHost,
+		ConnectTimeout: defaultConnectTimeout,
+		ReadTimeout:    defaultReadTimeout,
+		WriteTimeout:   defaultWriteTimeout,
+	}
+}
+
+func NewSenderHosts(hosts []string) *Sender {
+	return &Sender{
+		Hosts:          hosts,
 		MaxRedirects:   defaultMaxRedirects,
 		UpdateHost:     defaultUpdateHost,
 		ConnectTimeout: defaultConnectTimeout,
@@ -174,7 +186,7 @@ func NewSenderTimeout(
 	writeTimeout time.Duration,
 ) *Sender {
 	return &Sender{
-		Host:           host,
+		Hosts:          []string{host},
 		MaxRedirects:   defaultMaxRedirects,
 		UpdateHost:     defaultUpdateHost,
 		ConnectTimeout: connectTimeout,
@@ -231,7 +243,31 @@ func (s *Sender) SendMetrics(metrics []*Metric) (resActive Response, errActive e
 
 // Send connects to Zabbix, send the data, return the response and close the connection
 func (s *Sender) Send(packet *Packet) (res Response, err error) {
-	currentHost := s.Host
+	if s.PrimaryHost != "" {
+		res, err = s.sendWithRedirects(packet, s.PrimaryHost)
+		if err == nil {
+			return res, nil
+		}
+		fmt.Printf("Cached host %s failed: %v\n", s.PrimaryHost, err)
+		s.PrimaryHost = "" // clear cache
+	}
+
+	// Fallback: try each host in order
+	for i, host := range s.Hosts {
+		fmt.Printf("Trying host %d/%d: %s\n", i+1, len(s.Hosts), host)
+		res, err = s.sendWithRedirects(packet, host)
+		if err == nil {
+			s.PrimaryHost = host // cache working host
+			return res, nil
+		}
+		fmt.Printf("Host %s failed: %v\n", host, err)
+	}
+	return res, fmt.Errorf("all %d hosts failed", len(s.Hosts))
+}
+
+func (s *Sender) sendWithRedirects(packet *Packet, startHost string) (res Response, err error) {
+
+	currentHost := startHost
 
 	for redirectCount := 0; redirectCount <= s.MaxRedirects; redirectCount++ {
 		res, err = s.sendOnce(packet, currentHost)
@@ -241,8 +277,8 @@ func (s *Sender) Send(packet *Packet) (res Response, err error) {
 
 		// success - done
 		if res.Response == "success" {
-			if s.UpdateHost && currentHost != s.Host {
-				s.Host = currentHost
+			if s.UpdateHost && currentHost != startHost {
+				fmt.Printf("Updated to final proxy: %s\n", currentHost)
 			}
 			return res, nil
 		}
@@ -261,7 +297,7 @@ func (s *Sender) Send(packet *Packet) (res Response, err error) {
 		fmt.Printf("Redirect #%d to %s\n", redirectCount+1, currentHost)
 	}
 
-	return res, fmt.Errorf("too many redirects when sending to %s", s.Host)
+	return res, fmt.Errorf("max redirects exceeded from %s", startHost)
 }
 
 func (s *Sender) sendOnce(packet *Packet, host string) (res Response, err error) {
