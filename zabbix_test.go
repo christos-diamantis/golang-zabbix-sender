@@ -644,3 +644,47 @@ func TestNewPacketWithTime(t *testing.T) {
 		t.Fatalf("NS should be %d, got %d", now.Nanosecond(), p.NS)
 	}
 }
+
+func TestIntegration_SendMetrics(t *testing.T) {
+	var metrics []*Metric
+	metrics = append(metrics, NewMetric("test-api", "master_item", "this-is-a-test", false))
+
+	z := NewSender("127.0.0.1:10051")
+	z.MaxRedirects = 5
+	z.UpdateHost = true // test permanent host update
+
+	resActive, errActive, resTrapper, errTrapper := z.SendMetrics(metrics)
+
+	fmt.Printf("Active: %s (%v)\n", resActive.Response, errActive)
+	fmt.Printf("Trapper, response=%s, info=%s, error=%v\n", resTrapper.Response, resTrapper.Info, errTrapper)
+
+	if errActive != nil {
+		t.Fatalf("SendMetrics failed: %v", errActive)
+	}
+	if resActive.Response != "success" {
+		t.Errorf("Expected success, got: %+v", resActive)
+	} else {
+		fmt.Printf("✅ SUCCESS: %s\n", resActive.Info)
+	}
+}
+
+func TestIntegration_MultiHosts(t *testing.T) {
+	hosts := []string{"127.0.0.1:10051", "127.0.0.1:20051", "127.0.0.1:30051"}
+	z := NewSenderHosts(hosts)
+	z.MaxRedirects = 5
+
+	metrics := []*Metric{NewMetric("test-api", "master_item", "multi-host-test", false)}
+	resActive, errActive, resTrapper, errTrapper := z.SendMetrics(metrics)
+
+	fmt.Printf("Active: %s (%v)\n", resActive.Response, errActive)
+	fmt.Printf("Trapper, response=%s, info=%s, error=%v\n", resTrapper.Response, resTrapper.Info, errTrapper)
+
+	if errActive != nil {
+		t.Fatalf("Multi-host send failed: %v", errActive)
+	}
+	if resActive.Response != "success" {
+		t.Errorf("Expected success: %+v", resActive)
+	} else {
+		fmt.Printf("✅ Multi-host SUCCESS via %s: %s\n", z.PrimaryHost, resActive.Info)
+	}
+}

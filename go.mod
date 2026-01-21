@@ -1,3 +1,3 @@
-module github.com/chmller/go-zabbix-sender
+module github.com/christos-diamantis/golang-zabbix-sender
 
-go 1.19
+go 1.20
