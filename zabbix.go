@@ -18,6 +18,8 @@ const (
 	defaultConnectTimeout = 5 * time.Second
 	defaultWriteTimeout   = 5 * time.Second
 	defaultReadTimeout    = 15 * time.Second
+	defaultMaxRedirects   = 3
+	defaultUpdateHost     = false
 )
 
 // Metric class.
@@ -28,6 +30,19 @@ type Metric struct {
 	Clock  int64  `json:"clock,omitempty"`
 	NS     int    `json:"ns,omitempty"`
 	Active bool   `json:"-"`
+}
+
+// RedirectInfo class.
+type RedirectInfo struct {
+	Revision int    `json:"revision"`
+	Address  string `json:"address"`
+}
+
+func parseHostPort(addr string) (string, error) {
+	if !strings.Contains(addr, ":") {
+		return "", fmt.Errorf("invalid redirect address: %s", addr) // maybe extend this to add the port?
+	}
+	return addr, nil
 }
 
 // NewMetric return a zabbix Metric with the values specified
@@ -53,8 +68,9 @@ type Packet struct {
 
 // Reponse is a response for autoregister method
 type Response struct {
-	Response string
-	Info     string
+	Response string        `json:"response"`
+	Info     string        `json:"info"`
+	Redirect *RedirectInfo `json:"redirect,omitempty"`
 }
 
 type ResponseInfo struct {
@@ -131,6 +147,8 @@ func (p *Packet) DataLen() []byte {
 // Sender class
 type Sender struct {
 	Host           string
+	MaxRedirects   int  // max redirect attempts bedore error; default is 3
+	UpdateHost     bool // if true, update s.Host to final proxy after success
 	ConnectTimeout time.Duration
 	ReadTimeout    time.Duration
 	WriteTimeout   time.Duration
@@ -140,6 +158,8 @@ type Sender struct {
 func NewSender(host string) *Sender {
 	return &Sender{
 		Host:           host,
+		MaxRedirects:   defaultMaxRedirects,
+		UpdateHost:     defaultUpdateHost,
 		ConnectTimeout: defaultConnectTimeout,
 		ReadTimeout:    defaultReadTimeout,
 		WriteTimeout:   defaultWriteTimeout,
@@ -155,6 +175,8 @@ func NewSenderTimeout(
 ) *Sender {
 	return &Sender{
 		Host:           host,
+		MaxRedirects:   defaultMaxRedirects,
+		UpdateHost:     defaultUpdateHost,
 		ConnectTimeout: connectTimeout,
 		ReadTimeout:    readTimeout,
 		WriteTimeout:   writeTimeout,
@@ -209,10 +231,44 @@ func (s *Sender) SendMetrics(metrics []*Metric) (resActive Response, errActive e
 
 // Send connects to Zabbix, send the data, return the response and close the connection
 func (s *Sender) Send(packet *Packet) (res Response, err error) {
+	currentHost := s.Host
+
+	for redirectCount := 0; redirectCount <= s.MaxRedirects; redirectCount++ {
+		res, err = s.sendOnce(packet, currentHost)
+		if err != nil {
+			return res, fmt.Errorf("sendOnce to %s failed: %w", currentHost, err)
+		}
+
+		// success - done
+		if res.Response == "success" {
+			if s.UpdateHost && currentHost != s.Host {
+				s.Host = currentHost
+			}
+			return res, nil
+		}
+
+		// check for redirect
+		if res.Redirect == nil || res.Redirect.Address == "" {
+			return res, fmt.Errorf("failed without redirect from %s: %s", currentHost, res.Response)
+		}
+
+		// got redirect - update target and retry
+		newHost, err := parseHostPort(res.Redirect.Address)
+		if err != nil {
+			return res, err
+		}
+		currentHost = newHost
+		fmt.Printf("Redirect #%d to %s\n", redirectCount+1, currentHost)
+	}
+
+	return res, fmt.Errorf("too many redirects when sending to %s", s.Host)
+}
+
+func (s *Sender) sendOnce(packet *Packet, host string) (res Response, err error) {
 	// Timeout to resolve and connect to the server
-	conn, err := net.DialTimeout("tcp", s.Host, s.ConnectTimeout)
+	conn, err := net.DialTimeout("tcp", host, s.ConnectTimeout)
 	if err != nil {
-		return res, fmt.Errorf("connecting to server (timeout=%v): %v", s.ConnectTimeout, err)
+		return res, fmt.Errorf("connecting to %s (timeout=%v): %v", host, s.ConnectTimeout, err)
 	}
 	defer conn.Close()
 
@@ -226,9 +282,8 @@ func (s *Sender) Send(packet *Packet) (res Response, err error) {
 	conn.SetWriteDeadline(time.Now().Add(s.WriteTimeout))
 
 	// Send packet to zabbix
-	_, err = conn.Write(buffer)
-	if err != nil {
-		return res, fmt.Errorf("sending the data (timeout=%v): %s", s.WriteTimeout, err.Error())
+	if _, err = conn.Write(buffer); err != nil {
+		return res, fmt.Errorf("sending the data to %s (timeout=%v): %s", host, s.WriteTimeout, err.Error())
 	}
 
 	// Read timeout
@@ -237,7 +292,11 @@ func (s *Sender) Send(packet *Packet) (res Response, err error) {
 	// Read response from server
 	response, err := s.read(conn)
 	if err != nil {
-		return res, fmt.Errorf("reading the response (timeout=%v): %s", s.ReadTimeout, err)
+		return res, fmt.Errorf("reading the response from %s (timeout=%v): %s", host, s.ReadTimeout, err)
+	}
+
+	if len(response) < 13 {
+		return res, fmt.Errorf("response too short from %s: %d bytes", host, len(response))
 	}
 
 	header := response[:5]
@@ -248,7 +307,7 @@ func (s *Sender) Send(packet *Packet) (res Response, err error) {
 	}
 
 	if err := json.Unmarshal(data, &res); err != nil {
-		return res, fmt.Errorf("zabbix response is not valid: %v", err)
+		return res, fmt.Errorf("zabbix response from %s is not valid: %v", host, err)
 	}
 
 	return res, nil
