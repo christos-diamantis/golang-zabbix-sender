@@ -16,7 +16,7 @@ type Packet struct {
 	HostMetadata string    `json:"host_metadata,omitempty"`
 }
 
-// NewPacket return a zabbix packet with a list of metrics
+// NewPacket returns a zabbix packet with a list of metrics
 func NewPacket(data []*Metric, agentActive bool, t ...time.Time) *Packet {
 	var request string
 	if agentActive {

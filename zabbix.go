@@ -40,7 +40,7 @@ func NewMetric(host, key, value string, agentActive bool, t ...time.Time) *Metri
 // NewSender creates sender for single host.
 func NewSender(host string) *Sender {
 	return &Sender{
-		Hosts:          []string{host},
+		Hosts:          []string{normalizeHost(host)},
 		MaxRedirects:   defaultMaxRedirects,
 		UpdateHost:     defaultUpdateHost,
 		ConnectTimeout: defaultConnectTimeout,
@@ -51,12 +51,33 @@ func NewSender(host string) *Sender {
 
 // NewSenderHosts creates sender for multiple hosts (HA or Proxy Group).
 func NewSenderHosts(hosts []string) *Sender {
+	norm := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		norm = append(norm, normalizeHost(h))
+	}
 	return &Sender{
-		Hosts:          hosts,
+		Hosts:          norm,
 		MaxRedirects:   defaultMaxRedirects,
 		UpdateHost:     defaultUpdateHost,
 		ConnectTimeout: defaultConnectTimeout,
 		ReadTimeout:    defaultReadTimeout,
 		WriteTimeout:   defaultWriteTimeout,
+	}
+}
+
+// NewSenderTimeout creates Sender with custom timeouts.
+func NewSenderTimeout(
+	host string,
+	connectTimeout time.Duration,
+	readTimeout time.Duration,
+	writeTimeout time.Duration,
+) *Sender {
+	return &Sender{
+		Hosts:          []string{normalizeHost(host)},
+		MaxRedirects:   defaultMaxRedirects,
+		UpdateHost:     defaultUpdateHost,
+		ConnectTimeout: connectTimeout,
+		ReadTimeout:    readTimeout,
+		WriteTimeout:   writeTimeout,
 	}
 }

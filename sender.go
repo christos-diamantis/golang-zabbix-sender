@@ -20,23 +20,6 @@ type Sender struct {
 	WriteTimeout   time.Duration
 }
 
-// NewSenderTimeout creates Sender with custom timeouts.
-func NewSenderTimeout(
-	host string,
-	connectTimeout time.Duration,
-	readTimeout time.Duration,
-	writeTimeout time.Duration,
-) *Sender {
-	return &Sender{
-		Hosts:          []string{host},
-		MaxRedirects:   defaultMaxRedirects,
-		UpdateHost:     defaultUpdateHost,
-		ConnectTimeout: connectTimeout,
-		ReadTimeout:    readTimeout,
-		WriteTimeout:   writeTimeout,
-	}
-}
-
 // getHeader return zabbix header.
 // https://www.zabbix.com/documentation/4.0/manual/appendix/protocols/header_datalen
 func (s *Sender) getHeader() []byte {
