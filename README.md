@@ -1,6 +1,7 @@
 # zabbix-sender
 
-Golang package, implement zabbix sender protocol for send metrics to zabbix, supporting modern Zabbix 7.0+ proxy group redirect and multi-host high vailability.
+Golang package, implementing zabbix sender protocol for sending metrics to zabbix. 
+Supports modern Zabbix 7.0+ proxy group redirect and multi-host high vailability.
 
 ## ✨ Features
 - Send data on single host (Zabbix server or Proxy)
