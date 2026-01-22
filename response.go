@@ -2,6 +2,7 @@ package zabbix
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +14,7 @@ type RedirectInfo struct {
 	Address  string `json:"address"`
 }
 
-// Reponse is a response for autoregister method
+// Response is the response struct from Zabbix server/proxy.
 type Response struct {
 	Response string        `json:"response"`
 	Info     string        `json:"info"`
@@ -28,11 +29,26 @@ type ResponseInfo struct {
 	Spent     time.Duration
 }
 
+// parseHostPort validates and returns a normalized host:port address.
 func parseHostPort(addr string) (string, error) {
-	if !strings.Contains(addr, ":") {
-		return "", fmt.Errorf("invalid redirect address: %s", addr) // maybe extend this to add the port?
+	addr = normalizeHost(addr)
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || host == "" || port == "" {
+		return "", fmt.Errorf("invalid redirect address: %s", addr)
 	}
 	return addr, nil
+}
+
+// normalizeHost ensures the address has a port; defaults to 10051 if missing.
+func normalizeHost(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return addr
+	}
+	if strings.Contains(addr, ":") {
+		return addr
+	}
+	return addr + ":10051"
 }
 
 // GetInfo parses success response "info" field into statistics.
