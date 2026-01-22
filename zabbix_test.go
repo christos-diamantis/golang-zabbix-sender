@@ -688,3 +688,19 @@ func TestIntegration_MultiHosts(t *testing.T) {
 		fmt.Printf("✅ Multi-host SUCCESS via %s: %s\n", z.PrimaryHost, resActive.Info)
 	}
 }
+
+func TestNormalizeHost_DefaultPort(t *testing.T) {
+	s := NewSender("zabbix-proxy")
+	if got := s.Hosts[0]; got != "zabbix-proxy:10051" {
+		t.Fatalf("expected zabbix-proxy:10051, got %s", got)
+	} else {
+		fmt.Printf("got expected host: %s\n", got)
+	}
+
+	ha := NewSenderHosts([]string{"zabbix-proxy1:10051", "zabbix-proxy2"})
+	if ha.Hosts[0] != "zabbix-proxy1:10051" || ha.Hosts[1] != "zabbix-proxy2:10051" {
+		t.Fatalf("unexpected hosts: %#v", ha.Hosts)
+	} else {
+		fmt.Printf("got expected hosts: %#v\n", ha.Hosts)
+	}
+}
