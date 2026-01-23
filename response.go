@@ -1,4 +1,4 @@
-package zabbix
+package zabbix_sender
 
 import (
 	"fmt"

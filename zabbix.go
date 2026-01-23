@@ -1,5 +1,5 @@
-// Package zabbix implements Zabbix sender protocol with proxy group redirects and multi-host HA support.
-package zabbix
+// Package zabbix_sender implements Zabbix sender protocol with proxy group redirects and multi-host HA support.
+package zabbix_sender
 
 import (
 	"time"

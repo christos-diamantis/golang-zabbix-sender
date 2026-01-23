@@ -15,7 +15,7 @@ Supports modern Zabbix 7.0+ proxy group redirect and multi-host high vailability
 
 ## 📦 Installation
 ```bash
-go get github.com/christos-diamantis/golang-zabbix-sender
+go get github.com/christos-diamantis/zabbix_sender
 ```
 
 ## 🚀 Quick Start
@@ -26,21 +26,21 @@ package main
 import (
     "fmt"
 
-    "github.com/christos-diamantis/golang-zabbix-sender"
+    "github.com/christos-diamantis/zabbix_sender"
 )
 
 func main() {
     // Single host
-    sender := zabbix.NewSender("zabbix-proxy:10051")
+    sender := zabbix_sender.NewSender("zabbix-proxy:10051")
 
     // Multiple hosts in HA
-    senderHA := zabbix.NewSenderHosts([]string{"zabbix-proxy1:10051", "zabbix-proxy2:10051", "zabbix-proxy3"})
+    senderHA := zabbix_sender.NewSenderHosts([]string{"zabbix-proxy1:10051", "zabbix-proxy2:10051", "zabbix-proxy3"})
 
     // Create multiple metrics to send as batch
-    var metrics []*zabbix.Metric
-    metrics = append(metrics, zabbix.NewMetric("localhost", "cpu", "1.22", true, time.Now())) // Emulating Zabbix agent (active agent items)
-    metrics = append(metrics, zabbix.NewMetric("localhost", "status", "OK", true)) // Sending on trapper item type
-    metrics = append(metrics, zabbix.NewMetric("localhost", "someTrapper", "3.14", false)) // Sending on trapper item type
+    var metrics []*zabbix_sender.Metric
+    metrics = append(metrics, zabbix_sender.NewMetric("localhost", "cpu", "1.22", true, time.Now())) // Emulating Zabbix agent (active agent items) and specifying timestamp
+    metrics = append(metrics, zabbix_sender.NewMetric("localhost", "status", "OK", true)) // Emulating Zabbix agent (active agent items)
+    metrics = append(metrics, zabbix_sender.NewMetric("localhost", "someTrapper", "3.14", false)) // Sending on trapper item type
 
     // Send the metrics on the single host
     resActive, errActive, resTrapper, errTrapper := sender.SendMetrics(metrics)
@@ -62,7 +62,7 @@ func main() {
 ## 📖 All Usage Examples
 1. Single Host
 ```go
-sender := zabbix.NewSender("my-zabbix-proxy:10051")
+sender := zabbix_sender.NewSender("my-zabbix-proxy:10051")
 ```
 
 2. Multiple Hosts
@@ -72,7 +72,7 @@ hosts := []string{
     "my-zabbix-proxy2:10051",
     "my-zabbix-proxy3",
 }
-sender := zabbix.NewSenderHosts(hosts)
+sender := zabbix_sender.NewSenderHosts(hosts)
 sender.MaxRedirects = 3
 sender.UpdateHost = true // cache final redirected proxy
 ```
@@ -81,10 +81,10 @@ sender.UpdateHost = true // cache final redirected proxy
 3. Active Agent emulation
 ```go
 // Emulate Zabbix Agent active checks
-metrics := []*zabbix.Metric{
-    zabbix.NewMetric("MyAgent", "agent.ping", "1", true),           // active=true
-    zabbix.NewMetric("MyAgent", "agent.version", "2.4", true),      // active=true
-    zabbix.NewMetric("MyAgent", "system.cpu.util", "15.2", true),   // active=true
+metrics := []*zabbix_sender.Metric{
+    zabbix_sender.NewMetric("MyAgent", "agent.ping", "1", true),           // active=true
+    zabbix_sender.NewMetric("MyAgent", "agent.version", "2.4", true),      // active=true
+    zabbix_sender.NewMetric("MyAgent", "system.cpu.util", "15.2", true),   // active=true
 }
 resActive, _, _, _ := sender.SendMetrics(metrics) // uses "agent data" protocol
 ```
@@ -92,18 +92,18 @@ resActive, _, _, _ := sender.SendMetrics(metrics) // uses "agent data" protocol
 4. Trapper Items
 ```go
 // Custom trapper items
-metrics := []*zabbix.Metric{
-    zabbix.NewMetric("AppServer", "app.metrics.custom", "123", false), // trapper=false
-    zabbix.NewMetric("Database", "db.connections", "47", false),
+metrics := []*zabbix_sender.Metric{
+    zabbix_sender.NewMetric("AppServer", "app.metrics.custom", "123", false), // trapper=false
+    zabbix_sender.NewMetric("Database", "db.connections", "47", false),
 }
 _, errTrapper, _, _ := sender.SendMetrics(metrics) // uses "sender data" protocol
 ```
 
 5. Mixed Active + Trapper
 ```go
-metrics := []*zabbix.Metric{
-    zabbix.NewMetric("Host", "agent.ping", "1", true),    // → active packet
-    zabbix.NewMetric("Host", "custom.metric", "42", false), // → trapper packet
+metrics := []*zabbix_sender.Metric{
+    zabbix_sender.NewMetric("Host", "agent.ping", "1", true),    // → active packet
+    zabbix_sender.NewMetric("Host", "custom.metric", "42", false), // → trapper packet
 }
 
 resActive, errActive, resTrapper, errTrapper := sender.SendMetrics(metrics)
@@ -121,7 +121,7 @@ if err != nil {
 
 7. Custom timeouts
 ```go
-sender := zabbix.NewSenderTimeout(
+sender := zabbix_sender.NewSenderTimeout(
     "proxy:10051",
     10*time.Second,  // connect
     30*time.Second,  // read  
@@ -140,7 +140,7 @@ if err == nil {
 
 ## 🔧 Advanced Configuration
 ```go
-sender := zabbix.NewSenderHosts(hosts)
+sender := zabbix_sender.NewSenderHosts(hosts)
 sender.MaxRedirects = 10      // handle complex proxy groups
 sender.UpdateHost = true      // permanently cache final proxy
 sender.PrimaryHost = "known-good-proxy:10051" // pre-set cached host
